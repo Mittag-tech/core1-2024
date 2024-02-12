@@ -5,8 +5,12 @@ int initial_y_right=512;
 
 void setup() {
   // Digital input:
+  // Button:
   pinMode(2,INPUT_PULLUP);
   pinMode(3,INPUT_PULLUP);
+  //Toggle Switch:
+  pinMode(4,INPUT_PULLUP);
+  //Joystick:
   pinMode(12,INPUT_PULLUP);
   pinMode(13,INPUT_PULLUP);
 
@@ -53,8 +57,11 @@ void loop() {
   view_serial("right", x_right, y_right, initial_x_right, initial_y_right);
 
   bool shot_sw=digitalRead(2);
+  bool roll_mode=digitalRead(4);
   Serial.print("shot_sw: ");
-  Serial.println(shot_sw);
+  Serial.print(shot_sw);
+  Serial.print("  roll_mode: ");
+  Serial.println(roll_mode);
 
   delay(100); //100ms=0.1sec
 }

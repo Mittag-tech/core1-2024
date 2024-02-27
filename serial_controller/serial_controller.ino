@@ -30,6 +30,15 @@ void initialize_pos(int x_left, int y_left, int x_right, int y_right){
   }
 }
 
+float calculate_ratio(int joint_input, int initial_pos){
+  int joint_diff = joint_input - initial_pos;
+  if(joint_diff >= 0){
+    return (joint_diff * 100) / (1023 - initial_pos);
+  }else{
+    return abs(joint_diff * 100) / initial_pos;
+  }
+}
+
 void view_serial(const char* state, int x, int y, int initial_x, int initial_y){
   char buf[44];
   sprintf(buf, "=== %s ===", state);
@@ -62,6 +71,10 @@ void loop() {
   Serial.print(shot_sw);
   Serial.print("  roll_mode: ");
   Serial.println(roll_mode);
+
+  float ratio_x_left = calculate_ratio(x_left, initial_x_left);
+  Serial.print("ratio: ");
+  Serial.println(ratio_x_left);
 
   delay(100); //100ms=0.1sec
 }

@@ -33,9 +33,9 @@ void initialize_pos(int x_left, int y_left, int x_right, int y_right){
 float calculate_ratio(int joint_input, int initial_pos){
   int joint_diff = joint_input - initial_pos;
   if(joint_diff >= 0){
-    return (joint_diff * 100) / (1023 - initial_pos);
+    return joint_diff / (1023 - initial_pos);
   }else{
-    return abs(joint_diff * 100) / initial_pos;
+    return joint_diff / initial_pos;
   }
 }
 
@@ -73,8 +73,10 @@ void loop() {
   Serial.println(roll_mode);
 
   float ratio_x_left = calculate_ratio(x_left, initial_x_left);
-  Serial.print("ratio: ");
-  Serial.println(ratio_x_left);
+  float ratio_y_left = calculate_ratio(y_left, initial_y_left);
+  float ratio_x_right = calculate_ratio(x_right, initial_x_right);
+  float ratio_y_right = calculate_ratio(y_right, initial_y_right);
+  view_serial("ratio", ratio_x_left, ratio_y_left, ratio_x_right, ratio_y_right);
 
   delay(100); //100ms=0.1sec
 }

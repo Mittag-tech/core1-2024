@@ -1,12 +1,6 @@
 // build as software for M5Core
 // you need install M5 board, M5 Device, cybergear_controller 
 
-// #include <cybergear_bridge.hh>
-// #include <cybergear_bridge_packet.hh>
-// #include <cybergear_controller.hh>
-// #include <cybergear_driver.hh>
-// #include <cybergear_driver_defs.hh>
-// #include <ros2_logo.hh>
 #include <Arduino.h>
 #include <math.h>
 #include <mcp_can.h>
@@ -66,6 +60,7 @@ void setup()
   controller.enable_motors();
   M5.Lcd.println("done");
 
+  Serial2.begin(115200, SERIAL_8N1, 16,17);  // Init serial port 2.
   
   pinMode(STICK_X_INPUT, INPUT);
   pinMode(STICK_Y_INPUT, INPUT);

@@ -6,8 +6,8 @@ int right_vertical_zero_pos=512;
 int left_vertical_zero_pos=512;
 
 #define A_BUTTON (2)
-#define B_BUTTON (3)
-#define X_BUTTON (4)
+#define B_BUTTON (4)
+#define X_BUTTON (3)
 #define Y_BUTTON (5)
 #define RESET_STICK_BUTTON (6)
 #define TOGGLE_A (7)

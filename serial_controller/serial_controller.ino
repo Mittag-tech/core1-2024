@@ -166,10 +166,28 @@ void loop() {
   send_data[5] = 0;
   send_data[6] = 0;
 
-  Serial1.write(send_data,7);
-  char debug_send_data[30] ={0};
-  sprintf(debug_send_data,"%3d,%3d,%3d,%3d,%3d,%3d,%3d",send_data[0],send_data[1],send_data[2],send_data[3],send_data[4],send_data[5],send_data[6]);
-  Serial.write(debug_send_data,30);
-  Serial.println();
+  for (int i=0;i<7;i++){
+    char send_format[3] = {0};
+    sprintf(send_format,"%02x",(unsigned char)(send_data[i]));
+    Serial1.write(send_format,2);
+    Serial.write(send_format,2);
+    if(i<6){
+      Serial1.write(',');
+      Serial.write(',');
+    }
+  }
+  Serial1.write("\r\n");
+  Serial.write("\r\n");
+  // Serial1.println();
+  // Serial.println();
+  // char debug_send_data[30] ={0};
+  // sprintf(debug_send_data,"%3d,%3d,%3d,%3d,%3d,%3d,%3d",send_data[0],send_data[1],send_data[2],send_data[3],send_data[4],send_data[5],send_data[6]);
+  // Serial.write(debug_send_data,30);
+  // Serial.println();
+
+  if(Serial1.available()){
+    int ch = Serial1.read();
+    Serial.write(ch);
+  }
   delay(200); //100ms=0.1sec
 }

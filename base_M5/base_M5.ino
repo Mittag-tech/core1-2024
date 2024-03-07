@@ -37,12 +37,20 @@ bool y_button = false;
 bool spin_switch = false;
 bool shoot_ready = false;
 
-// #define STICK_X_INPUT 35
-// #define STICK_Y_INPUT 36
 
+const uint8_t nBits_forPWM = 8; // PWMに使用するビット数　n=1～16[bit]
+                            //PWM周波数の最大値 Maxfreq=80000000.0/2^n[Hz]=312500[Hz]
+const uint8_t PWM_CH = 2;   // PWMチャンネル
+const uint8_t SHOOT_DIR_1 = 25;   // DIRチャンネル
+const uint8_t SHOOT_PIN = 2;  // PWM出力に使用するGPIO PIN番号
+const int PWM_Values = 76; //デューティ　デューティー比30%固定
+//実質的な射出速度
+                            //MaxDuty=2^n  DutyRatio = Duty/MaxDuty
+const double PWM_Frequency = 30000.0;
+                            // PWM周波数 Maxfreq=80000000.0/2^n[Hz]
 
-float offset_x = 1.1;
-float offset_y = 1.23;
+// float offset_x = 1.1;
+// float offset_y = 1.23;
 
 void setup()
 {
@@ -75,6 +83,11 @@ void setup()
 
   Serial2.begin(115200, SERIAL_8N1, 16,17);  // Init serial port 2.
   
+  
+  //set Pin mode
+  pinMode(SHOOT_PIN, OUTPUT); 
+  pinMode(SHOOT_DIR_1, OUTPUT); 
+  digitalWrite(SHOOT_DIR_1, HIGH);//射出モータの方向を変える
   // pinMode(STICK_X_INPUT, INPUT);
   // pinMode(STICK_Y_INPUT, INPUT);
 
@@ -143,6 +156,24 @@ int get_controller_data(){
 
 }
 
+void shoot_ready_set(){
+  static int old_pin = 0;
+  
+  if(old_pin!=shoot_ready){
+    // チャンネルと周波数の分解能を設定
+    ledcSetup(PWM_CH, PWM_Frequency, nBits_forPWM);
+    // PWM出力ピンとチャンネルの設定
+    ledcAttachPin(SHOOT_PIN, PWM_CH);
+    // デューティーの設定と出力開始
+    if(shoot_ready){
+      ledcWrite(PWM_CH, PWM_Values);
+    }else{
+      ledcWrite(PWM_CH, 0);
+    }
+    old_pin = shoot_ready;
+  }
+}
+
 void loop()
 {
   // update m5 satatus
@@ -184,6 +215,7 @@ void loop()
   speeds[3] =   target_x - target_y + (MECHANUM_LENGTH_X + MECHANUM_LENGTH_Y) * target_omega;
 
   controller.send_speed_command(motor_ids, speeds);
+  shoot_ready_set();
 
   //表示部
   M5.Lcd.clear(BLACK);

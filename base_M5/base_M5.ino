@@ -6,6 +6,30 @@
 #include <mcp_can.h>
 #include <M5Stack.h>
 #include <cybergear_controller.hh>
+#include <Wire.h>
+#include <Adafruit_PWMServoDriver.h>
+
+
+/**
+ * Servo Module settings
+*/
+Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40, Wire);
+
+#define SERVOMIN \
+    102  // This is the 'minimum' pulse length count (out of 4096)
+         // 这是“最小”脉冲长度计数（共 4096 个）
+#define SERVOMAX \
+    512  // This is the 'maximum' pulse length count (out of 4096)
+         // 这是“最大”脉冲长度计数（共 4096 个）
+#define USMIN \
+    500  // This is the rounded 'minimum' microsecond length based on the
+         // minimum pulse of 102  这是基于 102 的最小脉冲的舍入“最小”微秒长度
+#define USMAX \
+    2500  // This is the rounded 'maximum' microsecond length based on the
+          // maximum pulse of 512  这是基于 512 的最大脉冲的舍入“最大”微秒长度
+#define SERVO_FREQ \
+    50  // Analog servos run at ~50 Hz updates  模拟伺服以 ~50 Hz 更新运行
+
 
 /**
  * @brief Init can interface
@@ -43,10 +67,10 @@ const uint8_t nBits_forPWM = 8; // PWMに使用するビット数　n=1～16[bit
 const uint8_t PWM_CH = 2;   // PWMチャンネル
 const uint8_t SHOOT_DIR_1 = 25;   // DIRチャンネル
 const uint8_t SHOOT_PIN = 2;  // PWM出力に使用するGPIO PIN番号
-const int PWM_Values = 76; //デューティ　デューティー比30%固定
+const int PWM_Values = 70; //デューティ　デューティー比30%固定
 //実質的な射出速度
                             //MaxDuty=2^n  DutyRatio = Duty/MaxDuty
-const double PWM_Frequency = 30000.0;
+const double PWM_Frequency = 2000.0;
                             // PWM周波数 Maxfreq=80000000.0/2^n[Hz]
 
 // float offset_x = 1.1;
@@ -83,7 +107,10 @@ void setup()
 
   Serial2.begin(115200, SERIAL_8N1, 16,17);  // Init serial port 2.
   
-  
+  //Servo module setup
+    pwm.begin();
+    pwm.setPWMFreq(50);
+
   //set Pin mode
   pinMode(SHOOT_PIN, OUTPUT); 
   pinMode(SHOOT_DIR_1, OUTPUT); 
@@ -93,7 +120,9 @@ void setup()
 
 }
 
-const float MAX_SPEED = 1.0;
+const float MAX_SPEED = 25.0; //最高速度変更用,rad/s,CyberGear的MAXは25?
+const float MAX_OMEGA = 50.0; //最高回転速度変更用 m/s?
+const float SPIN_OMEGA = 100.0;
 const float MECHANUM_LENGTH_X = 0.4;
 const float MECHANUM_LENGTH_Y = 0.6;
 
@@ -103,13 +132,13 @@ int left_holizontal_zero_pos=132;
 int right_vertical_zero_pos=136;
 int left_vertical_zero_pos=135;
 
-float calculate_ratio(unsigned char joint_input, int initial_pos,float gain = 1){
+float calculate_ratio(unsigned char joint_input, int initial_pos,float dir = 1){
   int joint_diff = joint_input - initial_pos;
   // Serial.println(joint_diff);
   if(joint_diff >= 0){
-    return gain * (float)( MAX_SPEED* (joint_diff / float(255.0 - initial_pos)));
+    return dir * (float)(  (joint_diff / float(255.0 - initial_pos)));
   }else{
-    return gain * (float)( MAX_SPEED* (joint_diff / float(initial_pos)));
+    return dir * (float)(  (joint_diff / float(initial_pos)));
   }
 }
 
@@ -156,7 +185,30 @@ int get_controller_data(){
 
 }
 
-void shoot_ready_set(){
+
+void setServoPulse(uint8_t n, double pulse) {
+    double pulselength;
+    pulselength = 1000000;  // 1,000,000 us per second
+    pulselength /= 50;      // 50 Hz
+    Serial.print(pulselength);
+    Serial.println(" us per period");
+    pulselength /= 4096;  // 12 bits of resolution
+    Serial.print(pulselength);
+    Serial.println(" us per bit");
+    pulse *= 1000;
+    pulse /= pulselength;
+    Serial.println(pulse);
+    pwm.setPWM(n, 0, pulse);
+}
+
+void servo_angle_write(uint8_t n, int Angle) {
+    double pulse = Angle;
+    pulse        = pulse / 90 + 0.5;
+    setServoPulse(n, pulse);
+}
+
+/// @brief 射出モータのON/OFFを切り替える関数
+void shoot_ready_set(int emergency = 0){
   static int old_pin = 0;
   
   if(old_pin!=shoot_ready){
@@ -173,6 +225,51 @@ void shoot_ready_set(){
     old_pin = shoot_ready;
   }
 }
+
+const int servo_ready_angle_0 = 70;
+const int servo_shoot_angle_0 = 30;
+const int servo_ready_angle_1 = 55;
+const int servo_shoot_angle_1 = 90;
+const int servo_wait_cnt_max = 10;
+
+/// @brief 射出用サーボをコントロールする
+void shoot_servo_controll(int emergency = 0){
+  if(emergency){
+    servo_angle_write(0,servo_ready_angle_0);
+    servo_angle_write(1,servo_ready_angle_1);
+    return;
+  }
+  static int servo_cnt = 0; 
+  if(a_button){
+    if(servo_cnt < servo_wait_cnt_max/2){
+      //charge 0, shoot 1
+      servo_angle_write(0,servo_ready_angle_0);
+      servo_angle_write(1,servo_shoot_angle_1);
+      servo_cnt ++;
+    }else if(servo_cnt < servo_wait_cnt_max){
+      //shoot 0, charge 1
+      servo_angle_write(0,servo_shoot_angle_0);
+      servo_angle_write(1,servo_ready_angle_1);
+      servo_cnt++;
+    }else{
+      servo_cnt = 0;
+    }
+  }else{
+    //charge both
+      servo_angle_write(0,servo_ready_angle_0);
+      servo_angle_write(1,servo_ready_angle_1);
+      //  servo_cnt = 0; //to shoot evenly, do not reset cnt;
+  }
+}
+void inital_data_set(){
+  decoded_data[2] = left_holizontal_zero_pos;
+  decoded_data[1] = left_vertical_zero_pos;
+  decoded_data[4] = right_holizontal_zero_pos;
+  decoded_data[3] = right_vertical_zero_pos;
+  decoded_data[5] = 0;
+
+}
+
 
 void loop()
 {
@@ -195,20 +292,44 @@ void loop()
   // float target_y = -1*(2.0 * (float (stick_y_raw)/3000.0 ) - offset_y);
   // float target_omega = 0.0; 
 
-  while(!get_controller_data()){
+  int wireless_cnt = 0;
+  while(!get_controller_data() ){
+    // wireless_cnt++;
+    // if(wireless_cnt>50000){
+    //   wireless_cnt = -1;
+    //   break;
+    // }
+  }
+  // if(wireless_cnt == -1){
+  //   // inital_data_set();
+  // }
+
+  if(x_button || y_button){
+    left_holizontal_zero_pos = decoded_data[2];
+    left_vertical_zero_pos = decoded_data[1];
+    right_holizontal_zero_pos = decoded_data[4];
+    right_vertical_zero_pos = decoded_data[3];
   }
 
 
-  float target_x = calculate_ratio(decoded_data[2],left_holizontal_zero_pos);
-  float target_y = calculate_ratio(decoded_data[1],left_vertical_zero_pos,-1);
-  float target_omega = calculate_ratio(decoded_data[4],right_holizontal_zero_pos);
+  float target_x = MAX_SPEED * calculate_ratio(decoded_data[2],left_holizontal_zero_pos);
+  float target_y = MAX_SPEED * calculate_ratio(decoded_data[1],left_vertical_zero_pos,-1);
+  float target_omega = MAX_OMEGA * calculate_ratio(decoded_data[4],right_holizontal_zero_pos);
   
   // Serial.printf("%d,%d,%d,%d,%d,%d,%d\n"
   // ,decoded_data[0],decoded_data[1],decoded_data[2],decoded_data[3]
   // ,decoded_data[4],decoded_data[5],decoded_data[6]);
 
+  //add spin speed
+  if(spin_switch){
+    target_omega += SPIN_OMEGA;
+    // speed[4] = 0.5;
+  }else{
+    // speed[4] = 0.0;
+  }
+
   //calc each motor speed
-  // {0,1,2,3} = {upper Right, upper left, lower left, lower right}
+  // {0,1,2,3} = {upper Right, upper left, lower left, lower right}?
   speeds[0] =   target_x + target_y + (MECHANUM_LENGTH_X + MECHANUM_LENGTH_Y) * target_omega;
   speeds[1] = - target_x + target_y + (MECHANUM_LENGTH_X + MECHANUM_LENGTH_Y) * target_omega;
   speeds[2] = - target_x - target_y + (MECHANUM_LENGTH_X + MECHANUM_LENGTH_Y) * target_omega;
@@ -216,6 +337,7 @@ void loop()
 
   controller.send_speed_command(motor_ids, speeds);
   shoot_ready_set();
+  shoot_servo_controll();
 
   //表示部
   M5.Lcd.clear(BLACK);

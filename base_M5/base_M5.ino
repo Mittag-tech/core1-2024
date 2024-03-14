@@ -294,15 +294,15 @@ void loop()
 
   int wireless_cnt = 0;
   while(!get_controller_data() ){
-    // wireless_cnt++;
-    // if(wireless_cnt>50000){
-    //   wireless_cnt = -1;
-    //   break;
-    // }
+    wireless_cnt++;
+    if(wireless_cnt>10000){
+      wireless_cnt = -1;
+      break;
+    }
   }
-  // if(wireless_cnt == -1){
-  //   // inital_data_set();
-  // }
+  if(wireless_cnt == -1){
+    inital_data_set();
+  }
 
   if(x_button || y_button){
     left_holizontal_zero_pos = decoded_data[2];

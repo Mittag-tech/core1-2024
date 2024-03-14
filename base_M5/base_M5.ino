@@ -17,16 +17,12 @@ Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40, Wire);
 
 #define SERVOMIN \
     102  // This is the 'minimum' pulse length count (out of 4096)
-         // 这是“最小”脉冲长度计数（共 4096 个）
 #define SERVOMAX \
     512  // This is the 'maximum' pulse length count (out of 4096)
-         // 这是“最大”脉冲长度计数（共 4096 个）
 #define USMIN \
     500  // This is the rounded 'minimum' microsecond length based on the
-         // minimum pulse of 102  这是基于 102 的最小脉冲的舍入“最小”微秒长度
 #define USMAX \
     2500  // This is the rounded 'maximum' microsecond length based on the
-          // maximum pulse of 512  这是基于 512 的最大脉冲的舍入“最大”微秒长度
 #define SERVO_FREQ \
     50  // Analog servos run at ~50 Hz updates  模拟伺服以 ~50 Hz 更新运行
 
@@ -43,8 +39,11 @@ MCP_CAN CAN0(12);    // Set CS to pin 10
 // setup master can id and motor can id (default cybergear can id is 0x7F)
 uint8_t MASTER_CAN_ID = 0x00;
 
-std::vector<uint8_t> motor_ids = {127, 126, 125, 124};
-std::vector<float> speeds = {0.0f, 0.0f, 0.0f, 0.0f};
+std::vector<uint8_t> motor_ids = {127, 126, 125, 124, 123};//speed controll list
+std::vector<float> speeds = {0.0f, 0.0f, 0.0f, 0.0f, 0.0f};
+
+std::vector<uint8_t> position_motor_ids = {122, 121};//speed controll list
+std::vector<float> cyber_positions = {0.0f, 0.0f};
 
 // init cybergeardriver
 CybergearController controller = CybergearController(MASTER_CAN_ID);
@@ -82,30 +81,35 @@ void setup()
 
   // init cybergear driver
   init_can();
+  
+  delay(1000);
 
   //表示設定
   M5.Lcd.clear(BLACK);
   M5.Lcd.setCursor(0,0,2);
 
-  // init position offset
-  M5.Lcd.print("Init motors ... ");
-  controller.init(motor_ids, MODE_POSITION, &CAN0);
-  controller.enable_motors();
-  M5.Lcd.println("done");
 
+  // init position offset
+  M5.Lcd.print("Init arm motors ... ");
+  controller.init(position_motor_ids, MODE_POSITION, &CAN0);
+  M5.Lcd.println("done");
+  controller.enable_motors();
+  
   M5.Lcd.print("move to motor origin ... ");
-  controller.send_position_command(motor_ids, {0.0f, 0.0f});
+  controller.send_position_command(position_motor_ids, cyber_positions);
   delay(1000);
   M5.Lcd.println("done");
 
-
-  // start bilateral mode
-  M5.Lcd.print("starting mechanum controll demo ... ");
-  controller.init(motor_ids, MODE_SPEED, &CAN0);
-  controller.enable_motors();
-  M5.Lcd.println("done");
-
   Serial2.begin(115200, SERIAL_8N1, 16,17);  // Init serial port 2.
+
+  
+  // start bilateral mode
+  M5.Lcd.print("starting mechanum speed controll ... ");
+  controller.init(motor_ids, MODE_SPEED, &CAN0);
+  // controller.enable_motors();
+  M5.Lcd.println("done");
+  controller.enable_motors();
+  M5.Lcd.println("Start All Cybergears, done");
   
   //Servo module setup
     pwm.begin();
@@ -120,9 +124,10 @@ void setup()
 
 }
 
-const float MAX_SPEED = 25.0; //最高速度変更用,rad/s,CyberGear的MAXは25?
-const float MAX_OMEGA = 50.0; //最高回転速度変更用 m/s?
-const float SPIN_OMEGA = 100.0;
+const float MAX_SPEED = 25.0; //最高速度変更用,rad/s,CyberGear的MAXは30
+const float MAX_OMEGA = 30.0; //最高回転速度変更用 上から見た回転速度でrad/s,上から見て左回り
+const float SPIN_OMEGA = 15.0;//SPIN時の回転速度。15以下にしないと、首のサイバーギアが間に合わない。
+const float SPIN_NECK_GEARRATIO = 2.0; //首のギア比。減速で1より大きくする
 const float MECHANUM_LENGTH_X = 0.4;
 const float MECHANUM_LENGTH_Y = 0.6;
 
@@ -167,10 +172,12 @@ int get_controller_data(){
         flag = 1;
       }
       
-      a_button = (decoded_data[5] & 0x01)? 1:0;
-      x_button = (decoded_data[5] & 0x02)? 1:0;
+      a_button    = (decoded_data[5] & 0x01)? 1:0;
+      y_button    = (decoded_data[5] & 0x02)? 1:0;
       spin_switch = (decoded_data[5] & 0x04)? 1:0;
       shoot_ready = (decoded_data[5] & 0x08)? 1:0;
+      x_button    = (decoded_data[5] & 0x10)? 1:0;
+      b_button    = (decoded_data[5] & 0x20)? 1:0;
 
     }else{
       input[input_num] = data;
@@ -292,19 +299,26 @@ void loop()
   // float target_y = -1*(2.0 * (float (stick_y_raw)/3000.0 ) - offset_y);
   // float target_omega = 0.0; 
 
-  int wireless_cnt = 0;
+  unsigned long  wireless_cnt = millis()+1;
+  
   while(!get_controller_data() ){
-    wireless_cnt++;
-    if(wireless_cnt>10000){
-      wireless_cnt = -1;
+    if(millis() - wireless_cnt >3000){//無線が3000ms来ないとき、無線通信途絶と解釈
+      wireless_cnt = 0;
       break;
     }
+    // wireless_cnt++;
+    // if(wireless_cnt>10000){ //無線が切れたとき＝何回やっても全然通信できないとき用
+    //   wireless_cnt = -1;
+    //   break;
+    // }
+    // delay_ms(1);
   }
-  if(wireless_cnt == -1){
+  if(wireless_cnt == 0){
     inital_data_set();
   }
 
-  if(x_button || y_button){
+
+  if(y_button){
     left_holizontal_zero_pos = decoded_data[2];
     left_vertical_zero_pos = decoded_data[1];
     right_holizontal_zero_pos = decoded_data[4];
@@ -323,13 +337,13 @@ void loop()
   //add spin speed
   if(spin_switch){
     target_omega += SPIN_OMEGA;
-    // speed[4] = 0.5;
+    speed[4] = - SPIN_NECK_GEARRATIO * SPIN_OMEGA;
   }else{
-    // speed[4] = 0.0;
+    speed[4] = 0.0;
   }
 
   //calc each motor speed
-  // {0,1,2,3} = {upper Right, upper left, lower left, lower right}?
+  // {0,1,2,3} = {RrR, FrR, FrL, RrL} x-> right
   speeds[0] =   target_x + target_y + (MECHANUM_LENGTH_X + MECHANUM_LENGTH_Y) * target_omega;
   speeds[1] = - target_x + target_y + (MECHANUM_LENGTH_X + MECHANUM_LENGTH_Y) * target_omega;
   speeds[2] = - target_x - target_y + (MECHANUM_LENGTH_X + MECHANUM_LENGTH_Y) * target_omega;
@@ -345,8 +359,8 @@ void loop()
   M5.Lcd.printf("Stick : %3d, %3d ,%3d,%3d \n",decoded_data[1],decoded_data[2],decoded_data[3],decoded_data[4]);
   M5.Lcd.printf("Speed : %.3f, %.3f ,%.3f \n",target_x,target_y,target_omega);
   M5.Lcd.printf("Motor : %.3f, %.3f, %.3f, %.3f \n",speeds[0],speeds[1],speeds[2],speeds[3]);
-  M5.Lcd.printf("Button: %02x,A:%d, X:%d, SPIN:%d, SHOOT:%d \n",decoded_data[5]
-    ,a_button,x_button,spin_switch,shoot_ready);
+  M5.Lcd.printf("Button: %02x,A:%d, B:%d,X:%d, Y:%d, SPIN:%d, SHOOT:%d \n",decoded_data[5]
+    ,a_button,b_button, x_button,,y_button,spin_switch,shoot_ready);
 
   delay(30);
 }
